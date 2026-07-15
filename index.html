@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR QR Admin Panel</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(0,255,136,0.15);
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+        .header p { color: rgba(255,255,255,0.5); font-size: 14px; }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 24px 16px;
+        }
+        .section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #00ff88;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 6px;
+            margin-top: 14px;
+        }
+        label:first-of-type { margin-top: 0; }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #00ff88;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+        }
+        select { cursor: pointer; }
+        select option { background: #1a1a2e; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 16px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #0a0a1a;
+        }
+        .btn-primary:hover { box-shadow: 0 4px 25px rgba(0,255,136,0.3); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+
+        #qrResult {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #qrcode {
+            display: inline-block;
+            padding: 16px;
+            background: #fff;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        #qrUrl {
+            font-size: 12px;
+            color: rgba(255,255,255,0.4);
+            word-break: break-all;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+        }
+
+        .help-box {
+            background: rgba(0,255,136,0.05);
+            border: 1px solid rgba(0,255,136,0.15);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 16px;
+            font-size: 13px;
+            line-height: 1.7;
+            color: rgba(255,255,255,0.6);
+        }
+        .help-box code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #00ff88;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .log-table th {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.4);
+            font-weight: 500;
+        }
+        .log-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: rgba(255,255,255,0.6);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.25);
+            font-size: 14px;
+        }
+        .badge {
+            background: rgba(0,255,136,0.12);
+            color: #00ff88;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🎯 AR QR Code Admin</h1>
+        <p>สร้าง QR Code ที่สแกนแล้วแสดงรูปสุ่ม 3D</p>
+    </div>
+
+    <div class="container">
+
+        <!-- ─── QR Generator ─── -->
+        <div class="section">
+            <h2>📱 สร้าง QR Code</h2>
+
+            <label>Base URL (URL ของ GitHub Pages)</label>
+            <input type="text" id="baseUrl" placeholder="https://yourusername.github.io/ar-qr" />
+
+            <label>เลือกชุดรูป</label>
+            <select id="setSelect"></select>
+
+            <button class="btn btn-primary" onclick="generateQR()">⚡ สร้าง QR Code</button>
+
+            <div id="qrResult" style="display:none">
+                <div id="qrcode"></div>
+                <div id="qrUrl"></div>
+                <button class="btn btn-secondary" onclick="downloadQR()">💾 Download PNG</button>
+            </div>
+        </div>
+
+        <!-- ─── Config Helper ─── -->
+        <div class="section">
+            <h2>🖼️ จัดการรูปภาพ</h2>
+
+            <div class="help-box">
+                <strong>วิธีเพิ่มรูป:</strong><br>
+                1. แก้ไขไฟล์ <code>config.js</code> ใน repo<br>
+                2. ใส่ URL ของรูปภาพในอาเรย์ <code>images</code><br>
+                3. Push ขึ้น GitHub แล้วรอ 1-2 นาที<br><br>
+
+                <strong>แหล่งรูปที่ใช้ได้:</strong><br>
+                • อัปรูปเข้า repo โฟลเดอร์ <code>images/</code> → ใช้ path เช่น <code>"images/photo1.jpg"</code><br>
+                • ใช้ URL รูปจาก Imgur, Cloudinary, Firebase Storage<br>
+                • ใช้รูปตัวอย่างจาก picsum.photos
+            </div>
+
+            <label>เพิ่มชุดรูปใหม่ — วาง URL รูป (บรรทัดละ URL)</label>
+            <textarea id="imageUrls" placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg&#10;images/local-photo.jpg"></textarea>
+
+            <label>ชื่อชุดรูป (ภาษาอังกฤษ ไม่มีเว้นวรรค)</label>
+            <input type="text" id="newSetId" placeholder="my_photos" />
+
+            <label>ชื่อแสดง</label>
+            <input type="text" id="newSetName" placeholder="ชุดรูปของฉัน" />
+
+            <button class="btn btn-secondary" onclick="generateConfig()">📋 สร้างโค้ด config.js</button>
+
+            <div id="configOutput" style="display:none; margin-top: 16px;">
+                <label>คัดลอกโค้ดนี้ไปวางใน config.js:</label>
+                <textarea id="configCode" style="min-height:180px;" readonly></textarea>
+                <button class="btn btn-secondary" onclick="copyConfig()" style="margin-top:8px">📋 Copy</button>
+            </div>
+        </div>
+
+        <!-- ─── Scan Stats ─── -->
+        <div class="section">
+            <h2>📊 สถิติการสแกน</h2>
+            <p style="font-size:12px; color:rgba(255,255,255,0.35); margin-bottom:12px;">
+                * ข้อมูลจาก localStorage ของ browser นี้เท่านั้น
+            </p>
+            <div id="scanStats"></div>
+        </div>
+
+        <!-- ─── Test Link ─── -->
+        <div class="section">
+            <h2>🧪 ทดสอบ</h2>
+            <label>ลองเปิด Viewer ตรงๆ</label>
+            <input type="text" id="testBaseUrl" placeholder="https://yourusername.github.io/ar-qr" />
+            <select id="testSet" style="margin-top:8px;"></select>
+            <button class="btn btn-secondary" onclick="openTest()" style="margin-top:8px;">🔗 เปิด Viewer</button>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // ─── Populate Set Dropdowns ───
+        function populateSets() {
+            const selects = [document.getElementById('setSelect'), document.getElementById('testSet')];
+            selects.forEach(sel => {
+                sel.innerHTML = '';
+                if (typeof IMAGE_SETS !== 'undefined') {
+                    Object.keys(IMAGE_SETS).forEach(key => {
+                        const opt = document.createElement('option');
+                        opt.value = key;
+                        opt.textContent = `${IMAGE_SETS[key].name || key} (${IMAGE_SETS[key].images.length} รูป)`;
+                        sel.appendChild(opt);
+                    });
+                }
+            });
+        }
+        populateSets();
+
+        // ─── Generate QR ───
+        let qr = null;
+        function generateQR() {
+            const base = document.getElementById('baseUrl').value.replace(/\/+$/, '');
+            const setId = document.getElementById('setSelect').value;
+            if (!base) { alert('กรุณาใส่ Base URL'); return; }
+
+            const url = `${base}/viewer.html?set=${setId}`;
+
+            const qrDiv = document.getElementById('qrcode');
+            qrDiv.innerHTML = '';
+            qr = new QRCode(qrDiv, {
+                text: url,
+                width: 256,
+                height: 256,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            document.getElementById('qrUrl').textContent = url;
+            document.getElementById('qrResult').style.display = 'block';
+        }
+
+        // ─── Download QR ───
+        function downloadQR() {
+            const canvas = document.querySelector('#qrcode canvas');
+            if (!canvas) {
+                const img = document.querySelector('#qrcode img');
+                if (img) {
+                    const a = document.createElement('a');
+                    a.href = img.src;
+                    a.download = 'qrcode.png';
+                    a.click();
+                }
+                return;
+            }
+            const a = document.createElement('a');
+            a.href = canvas.toDataURL('image/png');
+            a.download = 'qrcode.png';
+            a.click();
+        }
+
+        // ─── Generate Config Code ───
+        function generateConfig() {
+            const urls = document.getElementById('imageUrls').value
+                .split('\n')
+                .map(u => u.trim())
+                .filter(u => u.length > 0);
+            const setId = document.getElementById('newSetId').value.trim() || 'my_set';
+            const setName = document.getElementById('newSetName').value.trim() || setId;
+
+            if (urls.length === 0) { alert('กรุณาใส่ URL รูปภาพ'); return; }
+
+            const code = `  "${setId}": {\n    name: "${setName}",\n    images: [\n${urls.map(u => `      "${u}"`).join(',\n')}\n    ]\n  }`;
+
+            document.getElementById('configCode').value =
+                `// เพิ่มในไฟล์ config.js ภายใน IMAGE_SETS = { ... }\n// วางก่อนปิด }; ตัวสุดท้าย (อย่าลืมใส่ , หลัง } ของชุดก่อนหน้า)\n\n${code}`;
+            document.getElementById('configOutput').style.display = 'block';
+        }
+
+        function copyConfig() {
+            const ta = document.getElementById('configCode');
+            ta.select();
+            document.execCommand('copy');
+            alert('คัดลอกแล้ว!');
+        }
+
+        // ─── Scan Stats ───
+        function loadStats() {
+            const container = document.getElementById('scanStats');
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('scan_'));
+
+            if (keys.length === 0) {
+                container.innerHTML = '<div class="empty-state">ยังไม่มีข้อมูลการสแกน</div>';
+                return;
+            }
+
+            let html = '<table class="log-table"><thead><tr><th>ชุดรูป</th><th>ครั้ง</th><th>สแกนล่าสุด</th></tr></thead><tbody>';
+            keys.forEach(key => {
+                const data = JSON.parse(localStorage.getItem(key));
+                const setName = key.replace('scan_', '');
+                const lastLog = data.logs && data.logs.length > 0
+                    ? data.logs[data.logs.length - 1].time
+                    : '-';
+                html += `<tr>
+                    <td><span class="badge">${setName}</span></td>
+                    <td>${data.count || 0}</td>
+                    <td>${lastLog}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        loadStats();
+
+        // ─── Test ───
+        function openTest() {
+            const base = document.getElementById('testBaseUrl').value.replace(/\/+$/, '');
+            const setId = document.getElementById('testSet').value;
+            if (!base) { alert('กรุณาใส่ Base URL'); return; }
+            window.open(`${base}/viewer.html?set=${setId}`, '_blank');
+        }
+    </script>
+</body>
+</html>

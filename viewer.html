@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            background: #0a0a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            color: #fff;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ─── Particle Background ─── */
+        #particleCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ─── Scan Overlay ─── */
+        .scan-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            background: rgba(0,0,0,0.95);
+            transition: opacity 0.5s;
+        }
+        .scan-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .scan-frame {
+            width: 180px; height: 180px;
+            border: 2px solid #00ff88;
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .scan-frame::before {
+            content: '';
+            position: absolute;
+            left: 0; width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #00ff88, transparent);
+            box-shadow: 0 0 20px #00ff88, 0 0 60px #00ff88;
+            animation: scanLine 1.5s ease-in-out infinite;
+        }
+        @keyframes scanLine {
+            0%   { top: 0; }
+            50%  { top: calc(100% - 3px); }
+            100% { top: 0; }
+        }
+        .scan-frame .corners {
+            position: absolute; inset: -2px;
+        }
+        .scan-frame .corners::before,
+        .scan-frame .corners::after {
+            content: '';
+            position: absolute;
+            width: 30px; height: 30px;
+            border-color: #00ff88;
+            border-style: solid;
+        }
+        .scan-frame .corners::before {
+            top: 0; left: 0;
+            border-width: 3px 0 0 3px;
+            border-radius: 8px 0 0 0;
+        }
+        .scan-frame .corners::after {
+            top: 0; right: 0;
+            border-width: 3px 3px 0 0;
+            border-radius: 0 8px 0 0;
+        }
+        .scan-text {
+            color: #00ff88;
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* ─── Main Container ─── */
+        .main-container {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            padding: 20px;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        .main-container.visible { opacity: 1; }
+
+        /* ─── 3D Card ─── */
+        .card-scene {
+            perspective: 1200px;
+        }
+        .card {
+            width: 300px;
+            height: 300px;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.15s ease-out;
+            box-shadow:
+                0 0 40px rgba(0, 255, 136, 0.25),
+                0 25px 80px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 255, 136, 0.15);
+        }
+        .card.animate-in {
+            animation: cardFlipIn 1s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+        }
+        .card.animate-shuffle {
+            animation: cardShuffle 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+        }
+        .card.floating {
+            animation: cardFloat 4s ease-in-out infinite;
+        }
+        .card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .card .shine {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                135deg,
+                rgba(255,255,255,0.15) 0%,
+                transparent 50%,
+                transparent 100%
+            );
+            pointer-events: none;
+        }
+
+        @keyframes cardFlipIn {
+            0%   { transform: perspective(1200px) rotateY(180deg) scale(0.4); opacity: 0; }
+            50%  { transform: perspective(1200px) rotateY(-15deg) scale(1.05); opacity: 1; }
+            70%  { transform: perspective(1200px) rotateY(5deg) scale(0.98); }
+            100% { transform: perspective(1200px) rotateY(0deg) scale(1); opacity: 1; }
+        }
+        @keyframes cardShuffle {
+            0%   { transform: perspective(1200px) rotateY(0deg) scale(1); }
+            30%  { transform: perspective(1200px) rotateY(90deg) scale(0.8); opacity: 0.5; }
+            50%  { transform: perspective(1200px) rotateY(90deg) scale(0.8); opacity: 0.5; }
+            100% { transform: perspective(1200px) rotateY(0deg) scale(1); opacity: 1; }
+        }
+        @keyframes cardFloat {
+            0%, 100% { transform: translateY(0px) rotateX(0deg); }
+            50%      { transform: translateY(-12px) rotateX(2deg); }
+        }
+
+        /* ─── Glow Ring ─── */
+        .glow-ring {
+            position: absolute;
+            width: 340px; height: 340px;
+            border-radius: 50%;
+            border: 1px solid rgba(0,255,136,0.1);
+            box-shadow: 0 0 60px rgba(0,255,136,0.08);
+            animation: glowPulse 3s ease-in-out infinite;
+            pointer-events: none;
+            z-index: -1;
+        }
+        @keyframes glowPulse {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50%      { transform: scale(1.08); opacity: 0.8; }
+        }
+
+        /* ─── Info ─── */
+        .info-bar {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 12px 24px;
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.6);
+        }
+        .info-bar span { display: flex; align-items: center; gap: 6px; }
+        .info-bar .dot { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; }
+
+        /* ─── Shuffle Button ─── */
+        .shuffle-btn {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #0a0a1a;
+            border: none;
+            border-radius: 50px;
+            padding: 14px 36px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 25px rgba(0,255,136,0.3);
+        }
+        .shuffle-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 15px rgba(0,255,136,0.2);
+        }
+
+        .image-counter {
+            font-size: 11px;
+            color: rgba(255,255,255,0.35);
+            letter-spacing: 2px;
+        }
+
+        /* ─── Error ─── */
+        .error-container {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            padding: 40px;
+        }
+        .error-container .icon { font-size: 60px; margin-bottom: 16px; }
+        .error-container h2 { font-size: 20px; margin-bottom: 8px; color: #ff6b6b; }
+        .error-container p { font-size: 14px; color: rgba(255,255,255,0.5); max-width: 300px; }
+
+        @media (max-width: 360px) {
+            .card { width: 260px; height: 260px; }
+            .glow-ring { width: 300px; height: 300px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Particle Background -->
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Scan Overlay -->
+    <div class="scan-overlay" id="scanOverlay">
+        <div class="scan-frame">
+            <div class="corners"></div>
+        </div>
+        <div class="scan-text">กำลังโหลด...</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container" id="mainContainer">
+        <div class="glow-ring"></div>
+        <div class="card-scene">
+            <div class="card" id="card">
+                <img id="mainImage" src="" alt="AR Image" crossorigin="anonymous">
+                <div class="shine"></div>
+            </div>
+        </div>
+        <div class="info-bar">
+            <span><div class="dot"></div> <span id="setNameText">-</span></span>
+            <span>📷 สแกนครั้งที่ <strong id="scanCountText">0</strong></span>
+        </div>
+        <button class="shuffle-btn" onclick="shuffleImage()">🔄 สุ่มรูปใหม่</button>
+        <div class="image-counter" id="imageCounter"></div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-container" id="errorContainer" style="display:none">
+        <div class="icon">😵</div>
+        <h2>ไม่พบชุดรูปภาพ</h2>
+        <p id="errorText">ไม่พบชุดรูปที่ระบุ กรุณาตรวจสอบ QR Code หรือ config.js</p>
+    </div>
+
+    <!-- Load Config -->
+    <script src="config.js"></script>
+
+    <script>
+        // ─── Global State ───
+        let currentSet = null;
+        let currentImages = [];
+        let lastIndex = -1;
+        let scanCount = 0;
+
+        // ─── Parse URL ───
+        const params = new URLSearchParams(window.location.search);
+        const setId = params.get('set') || 'default';
+
+        // ─── Init ───
+        function init() {
+            // Check if config loaded
+            if (typeof IMAGE_SETS === 'undefined') {
+                showError('ไม่สามารถโหลด config.js ได้ ตรวจสอบว่าไฟล์อยู่ในโฟลเดอร์เดียวกัน');
+                return;
+            }
+
+            currentSet = IMAGE_SETS[setId];
+            if (!currentSet || !currentSet.images || currentSet.images.length === 0) {
+                showError(`ไม่พบชุดรูป "${setId}" ใน config.js\n\nชุดที่มี: ${Object.keys(IMAGE_SETS).join(', ')}`);
+                return;
+            }
+
+            currentImages = [...currentSet.images];
+            document.getElementById('setNameText').textContent = currentSet.name || setId;
+            document.getElementById('imageCounter').textContent = `รูปในชุด: ${currentImages.length} รูป`;
+
+            // Load scan count
+            const storageKey = `scan_${setId}`;
+            const scanData = JSON.parse(localStorage.getItem(storageKey) || '{"count":0,"logs":[]}');
+            scanCount = scanData.count;
+
+            // Show first image after scan animation
+            setTimeout(() => {
+                loadRandomImage(true);
+            }, 1800);
+        }
+
+        // ─── Load Random Image ───
+        function loadRandomImage(isFirstLoad = false) {
+            if (currentImages.length === 0) return;
+
+            // Pick random index (avoid same as last)
+            let idx;
+            if (currentImages.length === 1) {
+                idx = 0;
+            } else {
+                do {
+                    idx = Math.floor(Math.random() * currentImages.length);
+                } while (idx === lastIndex);
+            }
+            lastIndex = idx;
+
+            const imageUrl = currentImages[idx];
+            const img = document.getElementById('mainImage');
+            const card = document.getElementById('card');
+
+            // Remove old animations
+            card.classList.remove('animate-in', 'animate-shuffle', 'floating');
+
+            // Load image
+            img.onload = function() {
+                // Hide scan overlay
+                document.getElementById('scanOverlay').classList.add('hidden');
+
+                // Show main container
+                const main = document.getElementById('mainContainer');
+                main.style.display = '';
+                setTimeout(() => main.classList.add('visible'), 50);
+
+                // Animate card
+                if (isFirstLoad) {
+                    card.classList.add('animate-in');
+                    card.addEventListener('animationend', function handler() {
+                        card.classList.remove('animate-in');
+                        card.classList.add('floating');
+                        card.removeEventListener('animationend', handler);
+                    });
+                } else {
+                    card.classList.add('animate-shuffle');
+                    card.addEventListener('animationend', function handler() {
+                        card.classList.remove('animate-shuffle');
+                        card.classList.add('floating');
+                        card.removeEventListener('animationend', handler);
+                    });
+                }
+
+                // Record scan
+                recordScan(imageUrl);
+            };
+
+            img.onerror = function() {
+                console.warn('Image failed to load:', imageUrl);
+                // Try next image
+                const failedIdx = currentImages.indexOf(imageUrl);
+                if (currentImages.length > 1) {
+                    currentImages.splice(failedIdx, 1);
+                    lastIndex = -1;
+                    loadRandomImage(isFirstLoad);
+                } else {
+                    showError('รูปภาพทั้งหมดไม่สามารถโหลดได้ ตรวจสอบ URL ใน config.js');
+                }
+            };
+
+            // Set source (add cache buster for picsum)
+            if (imageUrl.includes('picsum.photos')) {
+                img.src = imageUrl + '?random=' + Date.now();
+            } else {
+                img.src = imageUrl;
+            }
+        }
+
+        // ─── Shuffle ───
+        function shuffleImage() {
+            const card = document.getElementById('card');
+            card.classList.remove('floating');
+            loadRandomImage(false);
+        }
+
+        // ─── Record Scan ───
+        function recordScan(imageUrl) {
+            scanCount++;
+            const storageKey = `scan_${setId}`;
+            const scanData = JSON.parse(localStorage.getItem(storageKey) || '{"count":0,"logs":[]}');
+            scanData.count = scanCount;
+            scanData.logs.push({
+                image: imageUrl,
+                time: new Date().toLocaleString('th-TH'),
+                timestamp: Date.now()
+            });
+            // Keep only last 500 logs
+            if (scanData.logs.length > 500) {
+                scanData.logs = scanData.logs.slice(-500);
+            }
+            localStorage.setItem(storageKey, JSON.stringify(scanData));
+            document.getElementById('scanCountText').textContent = scanCount;
+        }
+
+        // ─── Show Error ───
+        function showError(msg) {
+            document.getElementById('scanOverlay').classList.add('hidden');
+            document.getElementById('mainContainer').style.display = 'none';
+            const errEl = document.getElementById('errorContainer');
+            errEl.style.display = '';
+            document.getElementById('errorText').textContent = msg;
+        }
+
+        // ─── 3D Tilt (Touch) ───
+        (function setupTilt() {
+            const card = document.getElementById('card');
+            let isTouching = false;
+
+            card.addEventListener('touchstart', (e) => {
+                isTouching = true;
+                card.classList.remove('floating');
+                card.style.transition = 'transform 0.1s ease-out';
+            });
+
+            card.addEventListener('touchmove', (e) => {
+                if (!isTouching) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = card.getBoundingClientRect();
+                const x = ((touch.clientX - rect.left) / rect.width - 0.5) * 2;
+                const y = ((touch.clientY - rect.top) / rect.height - 0.5) * 2;
+                card.style.transform =
+                    `perspective(1200px) rotateY(${x * 20}deg) rotateX(${-y * 20}deg) scale(1.05)`;
+            }, { passive: false });
+
+            card.addEventListener('touchend', () => {
+                isTouching = false;
+                card.style.transform = '';
+                card.style.transition = 'transform 0.5s ease';
+                setTimeout(() => {
+                    if (!isTouching) {
+                        card.style.transition = '';
+                        card.classList.add('floating');
+                    }
+                }, 500);
+            });
+
+            // Mouse tilt for desktop
+            card.addEventListener('mousemove', (e) => {
+                card.classList.remove('floating');
+                const rect = card.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+                const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+                card.style.transform =
+                    `perspective(1200px) rotateY(${x * 15}deg) rotateX(${-y * 15}deg) scale(1.03)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+                setTimeout(() => card.classList.add('floating'), 300);
+            });
+        })();
+
+        // ─── Gyroscope Tilt ───
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (e) => {
+                const card = document.getElementById('card');
+                if (card.classList.contains('floating') && e.gamma !== null) {
+                    const x = Math.max(-15, Math.min(15, e.gamma * 0.4));
+                    const y = Math.max(-15, Math.min(15, (e.beta - 45) * 0.4));
+                    card.style.transform =
+                        `perspective(1200px) rotateY(${x}deg) rotateX(${-y}deg) translateY(${Math.sin(Date.now()/1000)*8}px)`;
+                }
+            });
+        }
+
+        // ─── Particle System ───
+        (function particles() {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+            let w, h;
+            const dots = [];
+            const TOTAL = 60;
+
+            function resize() {
+                w = canvas.width = window.innerWidth;
+                h = canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            for (let i = 0; i < TOTAL; i++) {
+                dots.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h,
+                    r: Math.random() * 2 + 0.5,
+                    dx: (Math.random() - 0.5) * 0.5,
+                    dy: (Math.random() - 0.5) * 0.5,
+                    alpha: Math.random() * 0.5 + 0.1
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, w, h);
+                dots.forEach(d => {
+                    d.x += d.dx;
+                    d.y += d.dy;
+                    if (d.x < 0) d.x = w;
+                    if (d.x > w) d.x = 0;
+                    if (d.y < 0) d.y = h;
+                    if (d.y > h) d.y = 0;
+                    ctx.beginPath();
+                    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 255, 136, ${d.alpha})`;
+                    ctx.fill();
+                });
+
+                // Draw connections
+                for (let i = 0; i < dots.length; i++) {
+                    for (let j = i + 1; j < dots.length; j++) {
+                        const dx = dots[i].x - dots[j].x;
+                        const dy = dots[i].y - dots[j].y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist < 120) {
+                            ctx.beginPath();
+                            ctx.moveTo(dots[i].x, dots[i].y);
+                            ctx.lineTo(dots[j].x, dots[j].y);
+                            ctx.strokeStyle = `rgba(0, 255, 136, ${0.06 * (1 - dist/120)})`;
+                            ctx.stroke();
+                        }
+                    }
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+        })();
+
+        // ─── Start ───
+        init();
+    </script>
+</body>
+</html>
